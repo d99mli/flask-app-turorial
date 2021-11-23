@@ -51,8 +51,15 @@ def get_users():
 
 class RegisterForm(Form):
     name = StringField('Name', [validators.Length(min=1, max=50)])
-    username = StringField('Username', [validators.Length(min=4, max=25)])
-    email = StringField('Email', [validators.Length(min=6, max=50)])
+    username = StringField('Username', [validators.Length(
+        min=4, max=25, message="Username must be between 4 and 25 characters.")
+    ])
+    email = StringField('Email', [
+        validators.Length(min=6, max=35),
+        validators.Regexp(
+            '^[a-zA-Z0-9.!#$%&*+/=?_~-]+@[a-zA-Z0-9-]+(?:\\.[a-zA-Z0-9-]+)*$',
+            message="Must be a valid e-mail")
+    ])
     password = PasswordField('Password', [
         validators.DataRequired(),
         validators.EqualTo('confirm', message='Passwords do not match')
@@ -64,10 +71,69 @@ class RegisterForm(Form):
 def register():
     form = RegisterForm(request.form)
     if request.method == 'POST' and form.validate():
-        # name = form.name.mongo
-        # email =
-        return render_template('register.html')
+        # check if username already exists in db
+        existing_user = mongo.db.users.find_one(
+            {"username": request.form.get('username').lower()})
+
+        if existing_user:
+            flash("Username already exists")
+            return redirect(url_for("register"))
+
+        registration = {
+            "name": request.form.get("name").lower(),
+            "email": request.form.get("email").lower(),
+            "username": request.form.get("username").lower(),
+            "password": sha256_crypt.hash(request.form.get("password"))
+        }
+        mongo.db.users.insert_one(registration)
+
+        # put the new user into 'session' cookie
+        session["user"] = request.form.get("username").lower()
+        flash("Registration successful!", 'success')
+
+        return redirect(url_for('login'))
+
     return render_template('register.html', form=form)
+
+
+# User Log in
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    form = RegisterForm(request.form)
+    if request.method == 'POST':
+        # Check if user exists in db
+        existing_user = mongo.db.users.find_one(
+            {"username": request.form.get("username").lower()})
+
+        if existing_user:
+            # Ensure hashed password matches user input
+            if sha256_crypt.verify(
+                request.form.get("password"), existing_user["password"]):
+                session["user"] = request.form.get("username").lower()
+                flash("Welcome, {}".format(
+                    request.form.get("username")), 'success')
+            else:
+                # invalid password match
+                flash("Incorrect Username and/or Password")
+                return redirect(url_for("login"))
+
+        else:
+            # Username doesn't exist
+            flash("Incorrect Username and/or Password")
+            return redirect(url_for("login"))
+
+        # username = request.form.get("username")
+        # password_candidate = request.form.get("password")
+
+        # Get user by username
+        # check video for login funcionality
+
+        # if result > 0:
+            # get stored hash password
+            # data = mongo.db.users.find_one_or_404('username')
+            # password = mongo.db.users
+    return render_template('login.html', form=form)
 
 
 if __name__ == '__main__':
