@@ -113,6 +113,7 @@ def login():
                 session["user"] = request.form.get("username").lower()
                 flash("Welcome, {}".format(
                     request.form.get("username")), 'success')
+                return redirect(url_for('dashboard'))
             else:
                 # invalid password match
                 flash("Incorrect Username and/or Password")
@@ -123,17 +124,12 @@ def login():
             flash("Incorrect Username and/or Password")
             return redirect(url_for("login"))
 
-        # username = request.form.get("username")
-        # password_candidate = request.form.get("password")
-
-        # Get user by username
-        # check video for login funcionality
-
-        # if result > 0:
-            # get stored hash password
-            # data = mongo.db.users.find_one_or_404('username')
-            # password = mongo.db.users
     return render_template('login.html', form=form)
+
+
+@app.route('/dashboard')
+def dashboard():
+    return render_template('dashboard.html')
 
 
 if __name__ == '__main__':
