@@ -1,4 +1,5 @@
 import os
+from functools import wraps
 from flask import (
     Flask, render_template, flash, redirect,
     url_for, session, request, logging)
@@ -97,7 +98,6 @@ def register():
 
 
 # User Log in
-
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     form = RegisterForm(request.form)
@@ -127,7 +127,29 @@ def login():
     return render_template('login.html', form=form)
 
 
+# Check if user logged in (function decorator)
+def is_logged_in(f):
+    @wraps(f)
+    def wrap(*args, **kwargs):
+        if 'user' in session:
+            return f(*args, **kwargs)
+        else:
+            flash('Unauthorized, please login!', 'danger')
+            return redirect(url_for('login'))
+    return wrap
+
+
+# Logout
+@app.route('/logout')
+def logout():
+    session.clear()
+    flash('You are now logged out', 'success')
+    return redirect(url_for('login'))
+
+
+# Dashboard, for logged in users
 @app.route('/dashboard')
+@is_logged_in
 def dashboard():
     return render_template('dashboard.html')
 
