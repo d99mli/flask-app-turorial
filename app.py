@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from functools import wraps
 from flask import (
     Flask, render_template, flash, redirect,
@@ -141,6 +142,7 @@ def is_logged_in(f):
 
 # Logout
 @app.route('/logout')
+@is_logged_in
 def logout():
     session.clear()
     flash('You are now logged out', 'success')
@@ -152,6 +154,34 @@ def logout():
 @is_logged_in
 def dashboard():
     return render_template('dashboard.html')
+
+
+# Article form class
+class ArticleForm(Form):
+    title = StringField('Title', [validators.Length(min=1, max=100)])
+    body = TextAreaField('Body',
+        [validators.Length(min=10)], render_kw={'rows': 20})
+
+
+# Add article (to db)
+@app.route('/add_article', methods=['GET', 'POST'])
+@is_logged_in
+def add_article():
+    form = ArticleForm(request.form)
+    if request.method == 'POST' and form.validate():
+
+        one_article = {
+            "title": request.form.get("title").lower(),
+            "body": request.form.get("body").lower(),
+            "author": session["user"],
+            "create_date": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+
+        mongo.db.articles.insert_one(one_article)
+        flash('Article Created!', 'success')
+        return redirect(url_for('dashboard'))
+
+    return render_template('add_article.html', form=form)
 
 
 if __name__ == '__main__':
