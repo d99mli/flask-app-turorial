@@ -9,7 +9,6 @@ from bson.objectid import ObjectId
 from passlib.hash import sha256_crypt
 from wtforms import (
     Form, StringField, TextAreaField, PasswordField, validators)
-from data import Articles
 if os.path.exists("env.py"):
     import env
 
@@ -21,8 +20,6 @@ app.config["MONGO_URI"] = os.environ.get("MONGO_URI")
 app.secret_key = os.environ.get("SECRET_KEY")
 
 mongo = PyMongo(app)
-
-Articles = Articles()
 
 
 @app.route('/')
@@ -37,7 +34,8 @@ def about():
 
 @app.route('/articles')
 def articles():
-    return render_template('articles.html', articles=Articles)
+    all_articles = mongo.db.articles.find()
+    return render_template('articles.html', articles=all_articles)
 
 
 @app.route('/article/<page_id>')
@@ -80,13 +78,14 @@ def register():
         if existing_user:
             flash("Username already exists")
             return redirect(url_for("register"))
-
+        # registration (requires an dictionary {} to store info)
         registration = {
             "name": request.form.get("name").lower(),
             "email": request.form.get("email").lower(),
             "username": request.form.get("username").lower(),
             "password": sha256_crypt.hash(request.form.get("password"))
         }
+        # insert_one requires an dictionary to store info in mongoDB
         mongo.db.users.insert_one(registration)
 
         # put the new user into 'session' cookie
@@ -114,7 +113,8 @@ def login():
                 session["user"] = request.form.get("username").lower()
                 flash("Welcome, {}".format(
                     request.form.get("username")), 'success')
-                return redirect(url_for('dashboard'))
+# return redirect(url_for('profile', username=session["user"]))
+                return redirect(url_for('dashboard', session=["user"]))
             else:
                 # invalid password match
                 flash("Incorrect Username and/or Password")
@@ -153,7 +153,18 @@ def logout():
 @app.route('/dashboard')
 @is_logged_in
 def dashboard():
+    # Get articles from db
+
     return render_template('dashboard.html')
+
+
+# Profile page (same as dashboard)
+@app.route("/profile/<username>", methods=["GET", "POST"])
+def profile(username):
+    # grab the session user's username from db
+    username = mongo.db.users.find_one(
+        {"username": session['user']})["username"]
+    return render_template("profile.html", username=username)
 
 
 # Article form class
@@ -182,6 +193,43 @@ def add_article():
         return redirect(url_for('dashboard'))
 
     return render_template('add_article.html', form=form)
+
+
+# This is from the Code Institute walkthrough, might need some adjusting
+@app.route("/edit_article/<article_id>", methods=["GET", "POST"])
+@is_logged_in
+def edit_task(article_id):
+    form = ArticleForm(request.form)
+    if request.method == 'POST' and form.validate():
+
+        one_article = {
+            "title": request.form.get("title").lower(),
+            "body": request.form.get("body").lower(),
+            "author": session["user"],
+            "create_date": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+
+        mongo.db.articles.update({"_id": ObjectId(article_id)}, one_article)
+        flash('Article Successfully Updated!', 'success')
+
+    article = mongo.db.articles.find_one({"_id": ObjectId(article_id)})
+
+    all_articles = mongo.db.articles.find()
+    return render_template(
+        'edit_task.html', article=article, articles=all_articles)
+
+
+@app.route("/delete_article/<article_id>")
+def delete_article(article_id):
+    mongo.db.articles.remove({"_id": ObjectId(article_id)})
+    flash("Article successfully removed!")
+    return redirect(url_for('articles'))
+
+
+@app.route("/get_categories")
+def get_categories():
+    categories = list(mongo.db.categories.find().sort("category_name", 1))
+    return render_template("categories.html", categories=categories)
 
 
 if __name__ == '__main__':
