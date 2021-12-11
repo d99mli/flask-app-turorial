@@ -8,7 +8,7 @@ from flask_pymongo import PyMongo
 from bson.objectid import ObjectId
 from passlib.hash import sha256_crypt
 from wtforms import (
-    Form, StringField, TextAreaField, PasswordField, validators)
+    Form, StringField, TextAreaField, PasswordField, validators, FileField)
 if os.path.exists("env.py"):
     import env
 
@@ -114,7 +114,7 @@ def login():
                 flash("Welcome, {}".format(
                     request.form.get("username")), 'success')
 # return redirect(url_for('profile', username=session["user"]))
-                return redirect(url_for('account'))
+                return redirect(url_for('articles'))
             else:
                 # invalid password match
                 flash("Incorrect Username and/or Password")
@@ -257,6 +257,7 @@ def delete_article(article_id):
     return redirect(url_for('articles'))
 
 
+# Categories
 @app.route("/get_categories")
 def get_categories():
     categories = list(mongo.db.categories.find().sort("category_name", 1))
@@ -313,7 +314,6 @@ def delete_category(category_id):
     mongo.db.categories.remove({"_id": ObjectId(category_id)})
     flash("Category Successfully removed!")
     return redirect(url_for('get_categories'))
-
 
 
 if __name__ == '__main__':
