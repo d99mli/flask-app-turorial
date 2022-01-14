@@ -6,6 +6,7 @@
       <h1 class="card-title">Register</h1>
       {% from "includes/_formhelpers.html" import render_field %}
       <form method="POST" action="{{ url_for('register') }}" class="card-text">
+        {{ form.hidden_tag() }}
           <div class="form-group">
               {{ render_field(form.name, class_ = 'form-control') }}
           </div>

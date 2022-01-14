@@ -1,25 +1,13 @@
-import os
 from datetime import datetime
 from functools import wraps
 from flask import (
-    Flask, render_template, flash, redirect,
-    url_for, session, request, logging)
-from flask_pymongo import PyMongo
+    render_template, flash, redirect,
+    url_for, session, request)
 from bson.objectid import ObjectId
 from passlib.hash import sha256_crypt
-from wtforms import (
-    Form, StringField, TextAreaField, PasswordField, validators, FileField)
-if os.path.exists("env.py"):
-    import env
-
-app = Flask(__name__)
-
-# MongoDB Connection Config
-app.config["MONGO_DBNAME"] = os.environ.get("MONGO_DBNAME")
-app.config["MONGO_URI"] = os.environ.get("MONGO_URI")
-app.secret_key = os.environ.get("SECRET_KEY")
-
-mongo = PyMongo(app)
+from app.models import User, Post
+from app.forms import RegisterForm, ArticleForm, CategoryForm, UpdateAccountForm
+from app import app, db, mongo
 
 
 @app.route('/')
@@ -47,24 +35,6 @@ def article(page_id):
 def get_users():
     users = mongo.db.users.find()
     return render_template('users.html', users=users)
-
-
-class RegisterForm(Form):
-    name = StringField('Name', [validators.Length(min=1, max=50)])
-    username = StringField('Username', [validators.Length(
-        min=4, max=25, message="Username must be between 4 and 25 characters.")
-    ])
-    email = StringField('Email', [
-        validators.Length(min=6, max=35),
-        validators.Regexp(
-            '^[a-zA-Z0-9.!#$%&*+/=?_~-]+@[a-zA-Z0-9-]+(?:\\.[a-zA-Z0-9-]+)*$',
-            message="Must be a valid e-mail")
-    ])
-    password = PasswordField('Password', [
-        validators.DataRequired(),
-        validators.EqualTo('confirm', message='Passwords do not match')
-    ])
-    confirm = PasswordField('Confirm Password')
 
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -109,7 +79,7 @@ def login():
         if existing_user:
             # Ensure hashed password matches user input
             if sha256_crypt.verify(
-                request.form.get("password"), existing_user["password"]):
+            request.form.get("password"), existing_user["password"]):
                 session["user"] = request.form.get("username").lower()
                 flash("Welcome, {}".format(
                     request.form.get("username")), 'success')
@@ -129,11 +99,11 @@ def login():
 
 
 # Check if user logged in (function decorator)
-def is_logged_in(f):
-    @wraps(f)
+def is_logged_in(self):
+    @wraps(self)
     def wrap(*args, **kwargs):
         if 'user' in session:
-            return f(*args, **kwargs)
+            return self(*args, **kwargs)
         else:
             flash('Unauthorized, please login!', 'danger')
             return redirect(url_for('login'))
@@ -156,53 +126,6 @@ def dashboard():
     # Get articles from db
 
     return render_template('dashboard.html')
-
-
-# User Account form class
-class UpdateAccountForm(Form):
-    name = StringField('Name', [validators.Length(min=1, max=50)])
-    username = StringField('Username', [validators.Length(
-        min=4, max=25, message="Username must be between 4 and 25 characters.")
-    ])
-    email = StringField('Email', [
-        validators.Length(min=6, max=35),
-        validators.Regexp(
-            '^[a-zA-Z0-9.!#$%&*+/=?_~-]+@[a-zA-Z0-9-]+(?:\\.[a-zA-Z0-9-]+)*$',
-            message="Must be a valid e-mail")
-    ])
-
-
-# Profile Account page (for logged in users)
-# @app.route("/account", methods=["GET", "POST"])
-# def account():
-#     # grab the session user's username from db
-#     user = mongo.db.users.find_one(
-#         {"username": session['user']})
-#     user_image = url_for('static', filename='pics/userimage.jpg')
-#     form = UpdateAccountForm(request.form)
-#     if request.method == 'POST' and form.validate():
-#         update_account = {
-#                 "name": request.form.get("name").lower(),
-#                 "email": request.form.get("email").lower(),
-#                 "username": request.form.get("username").lower()
-#             }
-#         # insert_one requires an dictionary to store info in mongoDB
-#         mongo.db.users.update(update_account)
-#         return redirect(url_for('account'))
-#     return render_template(
-#         "account.html", user=user, user_image=user_image, form=form)
-
-
-# Article form class
-class ArticleForm(Form):
-    title = StringField('Title', [validators.Length(min=1, max=100)])
-    body = TextAreaField('Body', [
-        validators.Length(min=10)], render_kw={'rows': 20})
-
-
-# Category form class
-class CategoryForm(Form):
-    category = StringField('Category', [validators.Length(min=3, max=25)])
 
 
 # Add article (to db)
@@ -282,12 +205,12 @@ def add_category():
     return render_template("add_category.html", form=form)
 
 
-# Edit Category
-@app.route("/edit_category/<category_id>", methods=["GET", "POST"])     #  route decorator which is passed with variable of category_id
+# Edit Category (route decorator which is passed with variable of category_id)
+@app.route("/edit_category/<category_id>", methods=["GET", "POST"])
 @is_logged_in
 def edit_category(category_id):
     category = mongo.db.categories.find_one({"_id": ObjectId(category_id)})
-    form = CategoryForm(request.form, category)
+    form = CategoryForm(request.form)
 
     # populate category form fields
     form.category.data = category['category_name']
@@ -316,7 +239,22 @@ def delete_category(category_id):
     return redirect(url_for('get_categories'))
 
 
-if __name__ == '__main__':
-    app.run(host=os.environ.get("IP"),
-            port=int(os.environ.get("PORT")),
-            debug=False)
+# Profile Account page (for logged in users)
+@app.route("/account", methods=["GET", "POST"])
+def account():
+    # grab the session user's username from db
+    user = mongo.db.users.find_one(
+        {"username": session['user']})
+    user_image = url_for('static', filename='pics/userimage.jpg')
+    form = UpdateAccountForm(request.form)
+    if request.method == 'POST' and form.validate():
+        update_account = {
+                "name": request.form.get("name").lower(),
+                "email": request.form.get("email").lower(),
+                "username": request.form.get("username").lower()
+            }
+        # insert_one requires an dictionary to store info in mongoDB
+        mongo.db.users.update(update_account)
+        return redirect(url_for('account_test'))
+    return render_template(
+        "account_test.html", user=user, user_image=user_image, form=form)
